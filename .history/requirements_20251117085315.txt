@@ -1,0 +1,9 @@
+gymnasium
+matplotlib
+numpy
+pandas
+pygame
+serial
+threading
+time
+torch
