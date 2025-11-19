@@ -38,7 +38,7 @@ def simple_policy(env):
     robot = env.robot_pos
     goal = env.goal_pos
 
-    # Simple policy
+    # Simplle policy
     direction = goal - robot
     norm = np.linalg.norm(direction)
     if norm > 0:

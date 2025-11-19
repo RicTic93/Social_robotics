@@ -373,7 +373,7 @@ class FauteuilEnv(gym.Env):
                 self.screen,
                 (255, 0, 0),  # Red
                 (int(self.robot_pos[0] * 50) + 25, int(self.robot_pos[1] * 50) + 25),
-                20,  # Alert circle radius
+                10,  # Alert circle radius
                 2    # Line thickness (0 for a filled circle)
             )
             

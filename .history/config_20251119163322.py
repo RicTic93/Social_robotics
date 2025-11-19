@@ -7,19 +7,19 @@ config = {
             'count': 3,
             'formation': 'converging',
             'center_pos': [3.0, 5.0],
-            'radius': 0.75,
+            'radius': 0.50,
         },
         {
             'count': 2,
             'formation': 'diverging',
             'center_pos': [7.0, 3.0],
-            'radius':  0.75,
+            'radius': 1.0,
         },
         {
             'count': 2,
             'formation': 'converging',
             'center_pos': [6.5, 7.0],
-            'radius': 0.75,
+            'radius': 1.0,
         }
         ],
                 

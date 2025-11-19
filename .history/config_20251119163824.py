@@ -13,13 +13,13 @@ config = {
             'count': 2,
             'formation': 'diverging',
             'center_pos': [7.0, 3.0],
-            'radius':  0.75,
+            'radius':  0.5,
         },
         {
             'count': 2,
             'formation': 'converging',
             'center_pos': [6.5, 7.0],
-            'radius': 0.75,
+            'radius': 0.5,
         }
         ],
                 

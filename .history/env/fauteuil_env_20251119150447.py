@@ -136,44 +136,6 @@ class FauteuilEnv(gym.Env):
             return v / norm
         return v
     
-    def is_between_converging_humans(self):
-        max_group_distance = 2.0  # Distance maximale entre le fauteuil et le centre du groupe pour activer la détection
-        converging_humans = []
-
-        # Identifie les humains des groupes convergents
-        for group in self.config.get("static_groups", []):
-            if group["formation"] == "converging":
-                center = np.array(group["center_pos"])
-                # Vérifie si le fauteuil est proche du groupe
-                if np.linalg.norm(self.robot_pos - center) > max_group_distance:
-                    continue  # Ignore les groupes trop éloignés
-                # Ajoute les humains de ce groupe à la liste
-                for i in range(group["count"]):
-                    angle = (2 * math.pi * i) / group["count"]
-                    human_pos = np.array([
-                        center[0] + group["radius"] * math.cos(angle),
-                        center[1] + group["radius"] * math.sin(angle)
-                    ])
-                    # Trouve l'humain correspondant dans self.humans (tolérance pour les floats)
-                    for h in self.humans:
-                        if h["type"] == "static" and np.allclose(h["pos"], human_pos, atol=0.1):
-                            converging_humans.append(h)
-
-        # Vérifie si le fauteuil est entre deux de ces humains
-        for i, h1 in enumerate(converging_humans):
-            for j, h2 in enumerate(converging_humans):
-                if i >= j:
-                    continue
-                d1 = np.linalg.norm(self.robot_pos - h1["pos"])
-                d2 = np.linalg.norm(self.robot_pos - h2["pos"])
-                d_humans = np.linalg.norm(h1["pos"] - h2["pos"])
-                # Tolérance réduite pour éviter les faux positifs
-                if abs((d1 + d2) - d_humans) < 0.2:  # Tolérance plus stricte
-                    return True
-        return False
-
-
-    
     def reset(self, seed=None, options=None):
         self.robot_pos = np.array([1.0, 1.0], dtype=np.float32)
 
@@ -275,24 +237,11 @@ class FauteuilEnv(gym.Env):
                 break
 
         # Collision with humans
-        # Gestion des récompenses liées aux humains
         for human in self.humans:
-            dist = np.linalg.norm(self.robot_pos - human["pos"])
-            # Collision avec humain
-            if dist < 0.5:
+            if np.linalg.norm(self.robot_pos - human["pos"]) < 0.5:
                 reward = -10.0
                 terminated = False
                 break
-            # Zones sociales
-            elif dist < 0.4:
-                reward += -5.0  # Zone intime
-            elif dist < 1.2:
-                reward += -2.0  # Zone personnelle
-                # Pas de récompense pour les zones sociale/public
-
-        # Pénalité si le fauteuil est entre deux humains convergents
-        if self.is_between_converging_humans():
-            reward += -5.0  # Pénalité supplémentaire
 
         # Goal reached
         if np.linalg.norm(self.robot_pos - self.goal_pos) < 0.5:
@@ -365,16 +314,6 @@ class FauteuilEnv(gym.Env):
                 self.screen,
                 (255, 0, 0), 
                 (int(v1[0]), int(v1[1])),5
-            )
-            
-        # Draw red circle around the wheelchair if it is between two converging humans
-        if self.is_between_converging_humans():
-            pygame.draw.circle(
-                self.screen,
-                (255, 0, 0),  # Red
-                (int(self.robot_pos[0] * 50) + 25, int(self.robot_pos[1] * 50) + 25),
-                20,  # Alert circle radius
-                2    # Line thickness (0 for a filled circle)
             )
             
 

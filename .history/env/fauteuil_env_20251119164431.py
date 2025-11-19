@@ -367,14 +367,14 @@ class FauteuilEnv(gym.Env):
                 (int(v1[0]), int(v1[1])),5
             )
             
-        # Draw red circle around the wheelchair if it is between two converging humans
+        # Draw red circle rouge autour du fauteuil s'il est entre deux humains convergents
         if self.is_between_converging_humans():
             pygame.draw.circle(
                 self.screen,
-                (255, 0, 0),  # Red
+                (255, 0, 0),  # Rouge
                 (int(self.robot_pos[0] * 50) + 25, int(self.robot_pos[1] * 50) + 25),
-                20,  # Alert circle radius
-                2    # Line thickness (0 for a filled circle)
+                10,  # Rayon du cercle d'alerte
+                2    # Épaisseur du trait (0 pour un cercle plein)
             )
             
 
