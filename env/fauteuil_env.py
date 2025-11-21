@@ -81,6 +81,8 @@ class FauteuilEnv(gym.Env):
         self.goal_pos = np.array([9.0, 9.0], dtype=np.float32)
         self.max_speed = 0.5
 
+        self.max_group_distance = 2.0
+
         # Generate obstacles while avoiding overlaps
         self.objects = []
         min_distance_param = self.social_distance  # Distance between obstacles is editable
@@ -136,8 +138,8 @@ class FauteuilEnv(gym.Env):
             return v / norm
         return v
     
-    def is_between_converging_humans(self):
-        max_group_distance = 2.0  # Distance maximale entre le fauteuil et le centre du groupe pour activer la détection
+    def is_between_converging_humans(self):  # !!!!!!!!
+        #max_group_distance = 2.0  # Distance maximale entre le fauteuil et le centre du groupe pour activer la détection
         converging_humans = []
 
         # Identifie les humains des groupes convergents
@@ -145,7 +147,7 @@ class FauteuilEnv(gym.Env):
             if group["formation"] == "converging":
                 center = np.array(group["center_pos"])
                 # Vérifie si le fauteuil est proche du groupe
-                if np.linalg.norm(self.robot_pos - center) > max_group_distance:
+                if np.linalg.norm(self.robot_pos - center) > self.max_group_distance:
                     continue  # Ignore les groupes trop éloignés
                 # Ajoute les humains de ce groupe à la liste
                 for i in range(group["count"]):
