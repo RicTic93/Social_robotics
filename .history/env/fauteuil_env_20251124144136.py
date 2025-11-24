@@ -306,32 +306,17 @@ class FauteuilEnv(gym.Env):
     # robot dans le champ de vision des humains
     def _is_robot_in_human_fov(self, human_pos, human_direction, robot_pos, angle_deg=180):
         """
-        Vérifie si le robot est dans le champ de vision (180°) d'un humain ET à une distance <= human_fov_distance.
-        :param human_pos: Position de l'humain.
-        :param human_direction: Direction vers laquelle l'humain regarde.
-        :param robot_pos: Position du robot.
-        :param angle_deg: Angle du champ de vision (180° par défaut).
-        :return: True si le robot est dans le champ de vision de l'humain et à une distance <= human_fov_distance.
+        Vérifie si le robot est dans le champ de vision (180°) d'un humain.
         """
-        # Calcule la distance entre l'humain et le robot
-        distance = np.linalg.norm(robot_pos - human_pos)
-        if distance > self.human_fov_distance:
-            return False
-
-        # Calcule la direction de l'humain vers le robot
         target_dir = robot_pos - human_pos
         target_angle = math.atan2(target_dir[1], target_dir[0])
 
-        # Calcule l'angle de la direction de l'humain
         human_dir_angle = math.atan2(human_direction[1], human_direction[0])
 
-        # Calcule la différence d'angle (en radians)
         angle_diff = target_angle - human_dir_angle
         angle_diff = (angle_diff + math.pi) % (2 * math.pi) - math.pi
 
-        # Convertit en degrés et vérifie si dans le champ de vision
         return abs(math.degrees(angle_diff)) <= angle_deg / 2
-
 
 
     def reset(self, seed=None, options=None):
@@ -386,6 +371,7 @@ class FauteuilEnv(gym.Env):
         self.robot_pos += action * self.max_speed
         self.robot_pos = np.clip(self.robot_pos, 0, 10)
         self.move_humans()
+
         reward = -0.1
         terminated = False
         human_feedback = 0  # Initialisation
@@ -393,7 +379,7 @@ class FauteuilEnv(gym.Env):
         # Feedback des humains (champ de vision + zones sociales)
         for human in self.humans:
             dist = np.linalg.norm(self.robot_pos - human["pos"])
-            if self._is_robot_in_human_fov(human["pos"], human["direction"], self.robot_pos):
+            if self._is_in_field_of_view(self.robot_pos, self.goal_pos, human["pos"]):
                 if dist < 0.4:  # Zone intime
                     human_feedback += -5.0
                 elif dist < 1.2:  # Zone personnelle

@@ -27,5 +27,5 @@ config = {
     'social_distance': 1.5,   # Distance between humans
     'fov_distance': 3.0,  # Distance de visualisation du fauteuil
     'human_fov_distance': 2.0,  # Distance de visualisation des humains
-    'human_fov_angle': 160  # Angle de vision des humains
+    'human_fov_angle': 180  # Angle de vision des humains
 }

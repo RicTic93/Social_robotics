@@ -56,11 +56,11 @@ class SGDFunctionApproximator:
             self.models.append(model)
 
     def featurize_state(self, state):
-        """Transforme l'état en features pour l'apprentissage."""
-        assert np.all(np.isfinite(state)), f"State contains non-finite values: {state}"
-        scaled = self.scaler.transform([state])
-        assert np.all(np.isfinite(scaled)), f"Scaled state contains non-finite values: {scaled}"
-        return self.featurizer.transform(scaled)[0]
+    """Transforme l'état en features pour l'apprentissage."""
+    assert np.all(np.isfinite(state)), f"State contains non-finite values: {state}"
+    scaled = self.scaler.transform([state])
+    assert np.all(np.isfinite(scaled)), f"Scaled state contains non-finite values: {scaled}"
+    return self.featurizer.transform(scaled)[0]
 
 
     def predict(self, state, action_index=None):

@@ -382,53 +382,7 @@ class FauteuilEnv(gym.Env):
                     human["pos"] = new_pos
                     
 
-    def step(self, action):
-        self.robot_pos += action * self.max_speed
-        self.robot_pos = np.clip(self.robot_pos, 0, 10)
-        self.move_humans()
-        reward = -0.1
-        terminated = False
-        human_feedback = 0  # Initialisation
-
-        # Feedback des humains (champ de vision + zones sociales)
-        for human in self.humans:
-            dist = np.linalg.norm(self.robot_pos - human["pos"])
-            if self._is_robot_in_human_fov(human["pos"], human["direction"], self.robot_pos):
-                if dist < 0.4:  # Zone intime
-                    human_feedback += -5.0
-                elif dist < 1.2:  # Zone personnelle
-                    human_feedback += -2.0
-
-        # Collision avec les obstacles
-        for obj in self.objects:
-            if np.linalg.norm(self.robot_pos - obj["pos"]) < 0.5 + obj["radius"]:
-                reward = -7.0
-                terminated = False
-                self.regenerate_layout = False
-                break
-
-        # Collision avec les humains
-        if not terminated:
-            for human in self.humans:
-                if np.linalg.norm(self.robot_pos - human["pos"]) < 0.5:
-                    reward = -10.0
-                    terminated = False
-                    self.regenerate_layout = False
-                    break
-
-        # Pénalité si entre deux humains convergents
-        if self.is_between_converging_humans():
-            reward += -5.0
-
-        # Succès
-        if not terminated and np.linalg.norm(self.robot_pos - self.goal_pos) < 0.5:
-            reward = 10.0
-            terminated = True
-            self.regenerate_layout = True
-
-        full_obs = self._get_obs()
-        return self._get_partial_obs(full_obs), reward, terminated, False, {"human_feedback": human_feedback}
-
+    
 
     def _get_obs(self):
         obs = np.concatenate([self.robot_pos, self.goal_pos])

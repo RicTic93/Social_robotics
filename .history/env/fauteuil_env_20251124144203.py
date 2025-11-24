@@ -386,6 +386,7 @@ class FauteuilEnv(gym.Env):
         self.robot_pos += action * self.max_speed
         self.robot_pos = np.clip(self.robot_pos, 0, 10)
         self.move_humans()
+
         reward = -0.1
         terminated = False
         human_feedback = 0  # Initialisation
@@ -393,7 +394,7 @@ class FauteuilEnv(gym.Env):
         # Feedback des humains (champ de vision + zones sociales)
         for human in self.humans:
             dist = np.linalg.norm(self.robot_pos - human["pos"])
-            if self._is_robot_in_human_fov(human["pos"], human["direction"], self.robot_pos):
+            if self._is_in_field_of_view(self.robot_pos, self.goal_pos, human["pos"]):
                 if dist < 0.4:  # Zone intime
                     human_feedback += -5.0
                 elif dist < 1.2:  # Zone personnelle
