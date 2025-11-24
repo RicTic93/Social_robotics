@@ -2,8 +2,9 @@ import numpy as np
 import time
 from env.fauteuil_env import FauteuilEnv
 from config import config
+import torch
 
-def generate_expert_demonstrations(env, num_demos, render = True, render_delay = 0.20):  # render_daelay change la vitesse d’affichage des images/parcour
+def generate_expert_demonstrations(env, num_demos, render = False, render_delay = 0.20):  # render_daelay change la vitesse d’affichage des images/parcour
     expert_demonstrations = []
     episode_reward = []
 
@@ -21,7 +22,8 @@ def generate_expert_demonstrations(env, num_demos, render = True, render_delay =
             action = simple_policy(env)
 
             # Exécute l'action
-            next_obs, reward, done, bool, info = env.step(action)
+            next_obs, reward, terminated, truncated, info = env.step(action)
+            done = terminated or truncated
 
             # Enregistre la paire observation-action
             trajectory.append((obs, action))
@@ -70,7 +72,7 @@ def simple_policy(env):
     for human in env.humans:
         diff = robot - human["pos"]
         dist = np.linalg.norm(diff)
-        if dist < 1.2:
+        if dist < 0.8:
             direction += (diff / (dist**2 + 1e-6)) * 2.0
             if dist<env.max_group_distance:
                 direction += (diff / (dist**2 + 1e-6)) * 4.0
@@ -91,10 +93,40 @@ def simple_policy(env):
 
     return action.astype(np.float32)
 
-env = FauteuilEnv(config)
+def run_policy(env, model, render=True):
+    obs, _ = env.reset()
+    done = False
+    total_reward = 0
+    rewards = []
+
+    while not done:
+        # Converti l'osservazione in tensore
+        obs_tensor = torch.tensor(obs, dtype=torch.float32).unsqueeze(0)
+
+        # Predici l'azione
+        with torch.no_grad():
+            action = model(obs_tensor).squeeze().numpy()
+
+        # Step nell'ambiente
+        next_obs, reward, done, _, info = env.step(action)
+        rewards.append(reward)
+
+        total_reward += reward
+
+        if render:
+            env.render()
+
+        obs = next_obs
+
+    print("Reward finale:", total_reward)
+    for n in rewards:
+        if n == -10: print("Hit humans")
+        elif n == -7 : print("Hit object")
+
+"""env = FauteuilEnv(config)
 
 # Generate expert demonstrations
 num_demos = 10
 expert_demonstrations, episode_rewards = generate_expert_demonstrations(env, num_demos)
 for i, reward in enumerate(episode_rewards):
-    print(f"Episode {i+1}: Total Reward = {reward}")
+    print(f"Episode {i+1}: Total Reward = {reward}")"""
