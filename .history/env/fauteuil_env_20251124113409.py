@@ -221,41 +221,34 @@ class FauteuilEnv(gym.Env):
     # agent can see in 140° angle field of view
     def _get_partial_obs(self, full_obs):
         """
-        Retourne une observation partielle de taille fixe (54 features) :
-        - 4 features : position du robot (2) + position du but (2)
+        Retourne une observation partielle de taille fixe (54 features).
+        - 4 features : robot_pos (2) + goal_pos (2)
         - 30 features : 10 objets max × (pos_x, pos_y, radius)
         - 20 features : 10 humains max × (pos_x, pos_y)
         """
-        # Initialise une observation vide de taille fixe (54)
-        partial_obs = np.zeros(54, dtype='float64')
-
-        # 1. Position du robot et du but (4 premières features)
+        partial_obs = np.zeros(54, dtype='float64')  # Taille fixe : 54
         robot_pos = full_obs[:2]
         goal_pos = full_obs[2:4]
         partial_obs[:2] = robot_pos
         partial_obs[2:4] = goal_pos
 
-        # 2. Ajoute les objets visibles dans le champ de vision (140°)
-        obj_start = 4  # Index de départ pour les objets
-        obj_count = 0  # Compteur d'objets ajoutés
+        # Ajoute les objets visibles (max 10)
+        obj_start = 4
+        obj_count = 0
         for obj in self.objects:
-            # Vérifie si l'objet est dans le champ de vision (140°)
             if self._is_in_field_of_view(robot_pos, goal_pos, obj["pos"]):
-                if obj_count < 10:  # Limite à 10 objets max
-                    # Ajoute la position (x, y) et le rayon de l'objet
+                if obj_count < 10:
                     partial_obs[obj_start + 3*obj_count] = obj["pos"][0]  # pos_x
                     partial_obs[obj_start + 3*obj_count + 1] = obj["pos"][1]  # pos_y
                     partial_obs[obj_start + 3*obj_count + 2] = obj["radius"]  # radius
                     obj_count += 1
 
-        # 3. Ajoute les humains visibles dans le champ de vision (140°)
-        human_start = 34  # 4 (robot+but) + 30 (10 objets × 3)
-        human_count = 0   # Compteur d'humains ajoutés
+        # Ajoute les humains visibles (max 10)
+        human_start = 4 + 30  # 4 (robot+goal) + 30 (objets)
+        human_count = 0
         for human in self.humans:
-            # Vérifie si l'humain est dans le champ de vision (140°)
             if self._is_in_field_of_view(robot_pos, goal_pos, human["pos"]):
-                if human_count < 10:  # Limite à 10 humains max
-                    # Ajoute la position (x, y) de l'humain
+                if human_count < 10:
                     partial_obs[human_start + 2*human_count] = human["pos"][0]  # pos_x
                     partial_obs[human_start + 2*human_count + 1] = human["pos"][1]  # pos_y
                     human_count += 1
@@ -263,42 +256,44 @@ class FauteuilEnv(gym.Env):
         return partial_obs
 
 
-
-
     # Obstacle and human in teh field of view
-    def _is_in_field_of_view(self, robot_pos, goal_pos, target_pos, angle_deg=140):
-        direction = goal_pos - robot_pos
+    def _is_in_field_of_view(self, robot_pos, target_pos, angle_deg=140):
+        # Calculez l'angle entre la direction du fauteuil et la cible
+        direction = self.goal_pos - robot_pos
         target_dir = target_pos - robot_pos
         angle = math.degrees(math.atan2(target_dir[1], target_dir[0]) - math.atan2(direction[1], direction[0]))
         return abs(angle) <= angle_deg / 2
-
-
     
     # robot dans le champ de vision des humains
     def _is_robot_in_human_fov(self, human_pos, human_direction, robot_pos, angle_deg=180):
         """
-        Vérifie si le robot est dans le champ de vision (180°) d'un humain.
+        Vérifie si le fauteuil est dans le champ de vision (180°) d'un humain.
+        :param human_pos: Position de l'humain.
+        :param human_direction: Direction vers laquelle l'humain regarde.
+        :param robot_pos: Position du fauteuil.
+        :param angle_deg: Angle de vision de l'humain (180° par défaut).
+        :return: True si le fauteuil est dans le champ de vision de l'humain.
         """
         target_dir = robot_pos - human_pos
-        target_angle = math.atan2(target_dir[1], target_dir[0])
-
-        human_dir_angle = math.atan2(human_direction[1], human_direction[0])
-
-        angle_diff = target_angle - human_dir_angle
-        angle_diff = (angle_diff + math.pi) % (2 * math.pi) - math.pi
-
-        return abs(math.degrees(angle_diff)) <= angle_deg / 2
-
+        angle = math.degrees(math.atan2(target_dir[1], target_dir[0]) - math.atan2(human_direction[1], human_direction[0]))
+        return abs(angle) <= angle_deg / 2
 
     def reset(self, seed=None, options=None):
-        self.robot_pos = np.array([1.0, 1.0], dtype='float32')
+        self.robot_pos = np.array([1.0, 1.0], dtype=np.float32)
+        
+        # --- LOGIQUE DE RÉGÉNÉRATION ---
+        # Si c'était un SUCCÈS (ou le tout début), on régénère le décor
         if self.regenerate_layout:
             self._generate_layout()
+        
+        # Toujours régénérer les dynamiques pour éviter le spawn kill
         self._respawn_dynamic_humans()
-        self.regenerate_layout = False
+
+        # Reset du flag (sera mis à True seulement si on gagne)
+        self.regenerate_layout = False 
+
         full_obs = self._get_obs()
         return self._get_partial_obs(full_obs), {}
-
 
 
     def move_humans(self):
@@ -341,51 +336,63 @@ class FauteuilEnv(gym.Env):
     def step(self, action):
         self.robot_pos += action * self.max_speed
         self.robot_pos = np.clip(self.robot_pos, 0, 10)
+
         self.move_humans()
 
         reward = -0.1
         terminated = False
-        human_feedback = 0  # Initialisation
-
-        # Feedback des humains (champ de vision + zones sociales)
+        
+        # Feedback des humains (zones sociales + champ de vision)
         for human in self.humans:
             dist = np.linalg.norm(self.robot_pos - human["pos"])
-            if self._is_in_field_of_view(self.robot_pos, self.goal_pos, human["pos"]):
+            # Vérifie si le fauteuil est dans le champ de vision de l'humain
+            if self._is_robot_in_human_fov(human["pos"], human["direction"], self.robot_pos):
                 if dist < 0.4:  # Zone intime
                     human_feedback += -5.0
                 elif dist < 1.2:  # Zone personnelle
                     human_feedback += -2.0
 
-        # Collision avec les obstacles
+        # Collision avec les humains
+        for human in self.humans:
+            dist = np.linalg.norm(self.robot_pos - human["pos"])
+            if dist < 0.5:  # Collision
+                reward = -10.0
+                terminated = False
+                break
+
+        # Pénalité si le fauteuil est entre deux humains convergents
+        if self.is_between_converging_humans():
+            reward += -5.0
+
+        # Collision Obstacles
         for obj in self.objects:
             if np.linalg.norm(self.robot_pos - obj["pos"]) < 0.5 + obj["radius"]:
                 reward = -7.0
-                terminated = True
-                self.regenerate_layout = False
+                terminated = False
+                self.regenerate_layout = False # ÉCHEC : On garde la map
                 break
-
-        # Collision avec les humains
+        
+        # Collision Humains
         if not terminated:
             for human in self.humans:
                 if np.linalg.norm(self.robot_pos - human["pos"]) < 0.5:
                     reward = -10.0
-                    terminated = True
-                    self.regenerate_layout = False
+                    terminated = False
+                    self.regenerate_layout = False # ÉCHEC : On garde la map
                     break
 
-        # Pénalité si entre deux humains convergents
-        if self.is_between_converging_humans():
-            reward += -5.0
-
         # Succès
-        if not terminated and np.linalg.norm(self.robot_pos - self.goal_pos) < 0.5:
-            reward = 10.0
-            terminated = True
-            self.regenerate_layout = True
+        if not terminated:
+            if np.linalg.norm(self.robot_pos - self.goal_pos) < 0.5:
+                reward = 10.0
+                terminated = True
+                self.regenerate_layout = True # SUCCÈS : Nouvelle map !
 
+        # Retourne l'observation partielle du fauteuil, la récompense, et le feedback des humains
         full_obs = self._get_obs()
         return self._get_partial_obs(full_obs), reward, terminated, False, {"human_feedback": human_feedback}
-
+        return self._get_partial_obs(self._get_obs()), reward, terminated, False, {"human_feedback": human_feedback}
+        #return self._get_obs(), reward, terminated, False, {}
 
     def _get_obs(self):
         obs = np.concatenate([self.robot_pos, self.goal_pos])

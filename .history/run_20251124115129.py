@@ -46,7 +46,7 @@ def main():
 
         current_action = read_keyboard()
         obs, reward, terminated, truncated, info = env.step(current_action)
-        #print(f"Position : {env.robot_pos} | Récompense : {reward:.2f}")
+        print(f"Position : {env.robot_pos} | Récompense : {reward:.2f}")
         # Dans la boucle principale (main), ajoute :
         print(f"Humains dans FOV: {[env._is_in_field_of_view(env.robot_pos, env.goal_pos, h['pos']) for h in env.humans]}")
 

@@ -221,56 +221,43 @@ class FauteuilEnv(gym.Env):
     # agent can see in 140° angle field of view
     def _get_partial_obs(self, full_obs):
         """
-        Retourne une observation partielle de taille fixe (54 features) :
-        - 4 features : position du robot (2) + position du but (2)
-        - 30 features : 10 objets max × (pos_x, pos_y, radius)
-        - 20 features : 10 humains max × (pos_x, pos_y)
+        Retourne une observation partielle de taille fixe (54 features).
         """
-        # Initialise une observation vide de taille fixe (54)
         partial_obs = np.zeros(54, dtype='float64')
-
-        # 1. Position du robot et du but (4 premières features)
         robot_pos = full_obs[:2]
         goal_pos = full_obs[2:4]
         partial_obs[:2] = robot_pos
         partial_obs[2:4] = goal_pos
 
-        # 2. Ajoute les objets visibles dans le champ de vision (140°)
-        obj_start = 4  # Index de départ pour les objets
-        obj_count = 0  # Compteur d'objets ajoutés
+        # Ajoute les objets visibles (max 10)
+        obj_start = 4
+        obj_count = 0
         for obj in self.objects:
-            # Vérifie si l'objet est dans le champ de vision (140°)
             if self._is_in_field_of_view(robot_pos, goal_pos, obj["pos"]):
-                if obj_count < 10:  # Limite à 10 objets max
-                    # Ajoute la position (x, y) et le rayon de l'objet
-                    partial_obs[obj_start + 3*obj_count] = obj["pos"][0]  # pos_x
-                    partial_obs[obj_start + 3*obj_count + 1] = obj["pos"][1]  # pos_y
-                    partial_obs[obj_start + 3*obj_count + 2] = obj["radius"]  # radius
+                if obj_count < 10:
+                    partial_obs[obj_start + 3*obj_count : obj_start + 3*obj_count + 2] = obj["pos"]
+                    partial_obs[obj_start + 3*obj_count + 2] = obj["radius"]
                     obj_count += 1
 
-        # 3. Ajoute les humains visibles dans le champ de vision (140°)
-        human_start = 34  # 4 (robot+but) + 30 (10 objets × 3)
-        human_count = 0   # Compteur d'humains ajoutés
+        # Ajoute les humains visibles (max 10)
+        human_start = 34  # 4 (robot+goal) + 30 (10 objets × 3)
+        human_count = 0
         for human in self.humans:
-            # Vérifie si l'humain est dans le champ de vision (140°)
             if self._is_in_field_of_view(robot_pos, goal_pos, human["pos"]):
-                if human_count < 10:  # Limite à 10 humains max
-                    # Ajoute la position (x, y) de l'humain
-                    partial_obs[human_start + 2*human_count] = human["pos"][0]  # pos_x
-                    partial_obs[human_start + 2*human_count + 1] = human["pos"][1]  # pos_y
+                if human_count < 10:
+                    partial_obs[human_start + 2*human_count : human_start + 2*human_count + 2] = human["pos"]
                     human_count += 1
 
         return partial_obs
 
 
 
-
     # Obstacle and human in teh field of view
     def _is_in_field_of_view(self, robot_pos, goal_pos, target_pos, angle_deg=140):
-        direction = goal_pos - robot_pos
-        target_dir = target_pos - robot_pos
-        angle = math.degrees(math.atan2(target_dir[1], target_dir[0]) - math.atan2(direction[1], direction[0]))
-        return abs(angle) <= angle_deg / 2
+    direction = goal_pos - robot_pos
+    target_dir = target_pos - robot_pos
+    angle = math.degrees(math.atan2(target_dir[1], target_dir[0]) - math.atan2(direction[1], direction[0]))
+    return abs(angle) <= angle_deg / 2
 
 
     

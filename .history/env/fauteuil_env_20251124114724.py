@@ -221,47 +221,34 @@ class FauteuilEnv(gym.Env):
     # agent can see in 140° angle field of view
     def _get_partial_obs(self, full_obs):
         """
-        Retourne une observation partielle de taille fixe (54 features) :
-        - 4 features : position du robot (2) + position du but (2)
-        - 30 features : 10 objets max × (pos_x, pos_y, radius)
-        - 20 features : 10 humains max × (pos_x, pos_y)
+        Retourne une observation partielle de taille fixe (54 features).
         """
-        # Initialise une observation vide de taille fixe (54)
         partial_obs = np.zeros(54, dtype='float64')
-
-        # 1. Position du robot et du but (4 premières features)
         robot_pos = full_obs[:2]
         goal_pos = full_obs[2:4]
         partial_obs[:2] = robot_pos
         partial_obs[2:4] = goal_pos
 
-        # 2. Ajoute les objets visibles dans le champ de vision (140°)
-        obj_start = 4  # Index de départ pour les objets
-        obj_count = 0  # Compteur d'objets ajoutés
+        # Ajoute les objets visibles (max 10)
+        obj_start = 4
+        obj_count = 0
         for obj in self.objects:
-            # Vérifie si l'objet est dans le champ de vision (140°)
             if self._is_in_field_of_view(robot_pos, goal_pos, obj["pos"]):
-                if obj_count < 10:  # Limite à 10 objets max
-                    # Ajoute la position (x, y) et le rayon de l'objet
-                    partial_obs[obj_start + 3*obj_count] = obj["pos"][0]  # pos_x
-                    partial_obs[obj_start + 3*obj_count + 1] = obj["pos"][1]  # pos_y
-                    partial_obs[obj_start + 3*obj_count + 2] = obj["radius"]  # radius
+                if obj_count < 10:
+                    partial_obs[obj_start + 3*obj_count : obj_start + 3*obj_count + 2] = obj["pos"]
+                    partial_obs[obj_start + 3*obj_count + 2] = obj["radius"]
                     obj_count += 1
 
-        # 3. Ajoute les humains visibles dans le champ de vision (140°)
-        human_start = 34  # 4 (robot+but) + 30 (10 objets × 3)
-        human_count = 0   # Compteur d'humains ajoutés
+        # Ajoute les humains visibles (max 10)
+        human_start = 34  # 4 (robot+goal) + 30 (10 objets × 3)
+        human_count = 0
         for human in self.humans:
-            # Vérifie si l'humain est dans le champ de vision (140°)
             if self._is_in_field_of_view(robot_pos, goal_pos, human["pos"]):
-                if human_count < 10:  # Limite à 10 humains max
-                    # Ajoute la position (x, y) de l'humain
-                    partial_obs[human_start + 2*human_count] = human["pos"][0]  # pos_x
-                    partial_obs[human_start + 2*human_count + 1] = human["pos"][1]  # pos_y
+                if human_count < 10:
+                    partial_obs[human_start + 2*human_count : human_start + 2*human_count + 2] = human["pos"]
                     human_count += 1
 
         return partial_obs
-
 
 
 
@@ -271,7 +258,6 @@ class FauteuilEnv(gym.Env):
         target_dir = target_pos - robot_pos
         angle = math.degrees(math.atan2(target_dir[1], target_dir[0]) - math.atan2(direction[1], direction[0]))
         return abs(angle) <= angle_deg / 2
-
 
     
     # robot dans le champ de vision des humains
@@ -339,52 +325,52 @@ class FauteuilEnv(gym.Env):
                     
 
     def step(self, action):
-        self.robot_pos += action * self.max_speed
-        self.robot_pos = np.clip(self.robot_pos, 0, 10)
-        self.move_humans()
+    self.robot_pos += action * self.max_speed
+    self.robot_pos = np.clip(self.robot_pos, 0, 10)
+    self.move_humans()
 
-        reward = -0.1
-        terminated = False
-        human_feedback = 0  # Initialisation
+    reward = -0.1
+    terminated = False
+    human_feedback = 0  # Initialisation
 
-        # Feedback des humains (champ de vision + zones sociales)
+    # Feedback des humains (champ de vision + zones sociales)
+    for human in self.humans:
+        dist = np.linalg.norm(self.robot_pos - human["pos"])
+        if self._is_in_field_of_view(self.robot_pos, self.goal_pos, human["pos"]):
+            if dist < 0.4:  # Zone intime
+                human_feedback += -5.0
+            elif dist < 1.2:  # Zone personnelle
+                human_feedback += -2.0
+
+    # Collision avec les obstacles
+    for obj in self.objects:
+        if np.linalg.norm(self.robot_pos - obj["pos"]) < 0.5 + obj["radius"]:
+            reward = -7.0
+            terminated = True
+            self.regenerate_layout = False
+            break
+
+    # Collision avec les humains
+    if not terminated:
         for human in self.humans:
-            dist = np.linalg.norm(self.robot_pos - human["pos"])
-            if self._is_in_field_of_view(self.robot_pos, self.goal_pos, human["pos"]):
-                if dist < 0.4:  # Zone intime
-                    human_feedback += -5.0
-                elif dist < 1.2:  # Zone personnelle
-                    human_feedback += -2.0
-
-        # Collision avec les obstacles
-        for obj in self.objects:
-            if np.linalg.norm(self.robot_pos - obj["pos"]) < 0.5 + obj["radius"]:
-                reward = -7.0
+            if np.linalg.norm(self.robot_pos - human["pos"]) < 0.5:
+                reward = -10.0
                 terminated = True
                 self.regenerate_layout = False
                 break
 
-        # Collision avec les humains
-        if not terminated:
-            for human in self.humans:
-                if np.linalg.norm(self.robot_pos - human["pos"]) < 0.5:
-                    reward = -10.0
-                    terminated = True
-                    self.regenerate_layout = False
-                    break
+    # Pénalité si entre deux humains convergents
+    if self.is_between_converging_humans():
+        reward += -5.0
 
-        # Pénalité si entre deux humains convergents
-        if self.is_between_converging_humans():
-            reward += -5.0
+    # Succès
+    if not terminated and np.linalg.norm(self.robot_pos - self.goal_pos) < 0.5:
+        reward = 10.0
+        terminated = True
+        self.regenerate_layout = True
 
-        # Succès
-        if not terminated and np.linalg.norm(self.robot_pos - self.goal_pos) < 0.5:
-            reward = 10.0
-            terminated = True
-            self.regenerate_layout = True
-
-        full_obs = self._get_obs()
-        return self._get_partial_obs(full_obs), reward, terminated, False, {"human_feedback": human_feedback}
+    full_obs = self._get_obs()
+    return self._get_partial_obs(full_obs), reward, terminated, False, {"human_feedback": human_feedback}
 
 
     def _get_obs(self):
