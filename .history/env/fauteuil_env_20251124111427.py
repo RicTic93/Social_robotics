@@ -28,7 +28,6 @@ class FauteuilEnv(gym.Env):
         self.robot_pos = np.array([1.0, 1.0], dtype=np.float32)
         self.goal_pos = np.array([8.0, 8.0], dtype=np.float32)
         self.max_speed = 0.5
-        self.max_group_distance = 2.0
         
         # Flag pour contrôler la régénération de la map
         self.regenerate_layout = True # Au début, on génère tout
@@ -183,7 +182,7 @@ class FauteuilEnv(gym.Env):
                 print("Warning: Map trop encombrée, un humain dynamique n'a pas pu spawner.")
                 
     def is_between_converging_humans(self):  # !!!!!!!!
-        self.max_group_distance = 2.0  # Distance maximale entre le fauteuil et le centre du groupe pour activer la détection
+        max_group_distance = 2.0  # Distance maximale entre le fauteuil et le centre du groupe pour activer la détection
         converging_humans = []
 
         # Identifie les humains des groupes convergents

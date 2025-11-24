@@ -28,7 +28,7 @@ class FauteuilEnv(gym.Env):
         self.robot_pos = np.array([1.0, 1.0], dtype=np.float32)
         self.goal_pos = np.array([8.0, 8.0], dtype=np.float32)
         self.max_speed = 0.5
-        self.max_group_distance = 2.0
+        self.max_group_distance = 2
         
         # Flag pour contrôler la régénération de la map
         self.regenerate_layout = True # Au début, on génère tout
