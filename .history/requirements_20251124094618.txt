@@ -1,0 +1,11 @@
+gymnasium
+matplotlib
+numpy
+pandas
+pygame
+sklearnpip install scikit-learn
+
+threading
+time
+torch
+torchvision

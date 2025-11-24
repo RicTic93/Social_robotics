@@ -1,0 +1,10 @@
+gymnasium
+matplotlib
+numpy
+pandas
+pygame
+sklearn
+threading
+time
+torch
+torchvision
