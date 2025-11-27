@@ -115,6 +115,32 @@ class Tamer:
         self.min_eps = min_eps
         self.epsilon_step = (epsilon - min_eps) / num_episodes
 
+        # Initialisation des compteurs
+        self.collision_count = 0
+        self.goal_reached = 0
+        self.intimate_violations = 0
+        self.personal_violations = 0
+        self.social_violations = 0
+        self.public_violations = 0
+
+        self.total_rewards = []
+        self.total_feedbacks = []
+        self.losses = []
+        self.predictabilities = []
+        self.politenesses = []
+
+        self.intimate_violations_per_episode = []
+        self.personal_violations_per_episode = []
+        self.social_violations_per_episode = []
+        self.public_violations_per_episode = []
+        self.collisions_per_episode = []
+        self.goals_per_episode = []
+        
+
+        #self.H = SGDFunctionApproximator(env, max_objects_in_view, max_humans_in_view)
+        #assert hasattr(self.H, 'models'), "self.H.models n'est pas initialisé correctement"
+
+
         # Initialise le modèle
         if model_file_to_load is not None:
             self.load_model(model_file_to_load)
@@ -123,20 +149,48 @@ class Tamer:
 
         # Configuration du logging
         self.reward_log_columns = [
-            'Episode', 'Timestep', 'Human Feedback', 'Environment Reward', 'Total Reward'
+            'Episode', 'Timestep', 'Human Feedback', 'Environment Reward',
+            'Total Reward', 'Action', 'Loss', 'Epsilon'
         ]
+
         current_time = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
         self.reward_log_path = os.path.join(self.output_dir, f'tamer_rewards_log_{current_time}.csv')
+
+        self.metrics_log_columns = [
+            'Episode', 'Total Reward', 'Total Feedback', 'Loss',
+            'Collisions', 'Goal Reached', 'Intimate Zone Violations',
+            'Personal Zone Violations', 'Social Zone Violations',
+            'Predictability', 'Politeness'
+        ]
+        self.metrics_log_path = os.path.join(self.output_dir, 'metrics_log.csv')
+
+    def log_metrics(self, episode_index, total_reward, total_feedback, episode_loss):
+        """Enregistre les métriques dans un fichier CSV."""
+        with open(self.metrics_log_path, 'a+', newline='') as metrics_obj:
+            metrics_writer = DictWriter(metrics_obj, fieldnames=self.metrics_log_columns)
+            if episode_index == 0:
+                metrics_writer.writeheader()
+            metrics_writer.writerow({
+                'Episode': episode_index + 1,
+                'Total Reward': total_reward,
+                'Total Feedback': total_feedback,
+                'Loss': episode_loss,
+                'Collisions': self.collision_count,
+                'Goal Reached': self.goal_reached,
+                'Intimate Zone Violations': self.intimate_violations,
+                'Personal Zone Violations': self.personal_violations,
+                'Social Zone Violations': self.social_violations
+            })
 
     def act(self, state):
         """Politique epsilon-greedy pour un espace d'action continu."""
         assert len(state) == 54, f"State size is {len(state)}, expected 54"
         if np.random.random() < 1 - self.epsilon:
             action = np.random.uniform(-1, 1, size=self.env.action_space.shape)
-            print(f"Random Action: {action}")
+            #print(f"Random Action: {action}")
         else:
             action = self.H.predict(state)
-            print(f"Predicted Action: {action}")
+            #print(f"Predicted Action: {action}")
             
         # Normalise et amplifie l'action pour s'assurer qu'elle a un effet visible
         action_norm = np.linalg.norm(action)
@@ -150,22 +204,34 @@ class Tamer:
         robot_pos = np.array(state[:2])
         goal_pos = np.array(state[2:4])
         robot_fov_distance = getattr(self.env,"fov_distance", ())
+
+        # Compteurs pour les violations des zones proxémiques
+        self.intimate_violations = 0
+        self.personal_violations = 0
+        self.social_violations = 0
+        self.public_violations = 0
         
         # --- Feedback humain visibles ---
         for human in self.env.humans:
             human_pos = np.array(human["pos"])
             dist = np.linalg.norm(robot_pos - human["pos"])
+
+            # Vérifie si l'humain est dans le champ de vision du robot
             if self.env._is_in_field_of_view(robot_pos, goal_pos, human_pos):
             # Vérifie si le robot est dans le champ de vision de l'humain (180°)
                 if self.env._is_robot_in_human_fov(human["pos"], human["direction"], robot_pos):
                     if dist < 0.4:  # Zone intime
                         feedback -= 5.0
+                        self.intimate_violations += 1
                     elif dist < 1.2:  # Zone personnelle
                         feedback -= 2.0
+                        self.personal_violations += 1
                     elif dist < 2.0:  # Zone sociale
-                        feedback += 2.0
+                        feedback += 1.0
+                        self.social_violations += 1
                     else:
-                        feedback += 2.0
+                        feedback += 2.0  # Zone publique
+                        self.public_violations += 1
       
         return feedback
 
@@ -173,51 +239,130 @@ class Tamer:
         """Entraîne l'agent pour un épisode."""
         state, _ = self.env.reset()
         total_reward = 0
+        total_feedback = 0
+        episode_loss = 0
+        self.collision_count = 0
+        self.intimate_violations = 0
+        self.personal_violations = 0
+        self.social_violations = 0
+        self.goal_reached = 0
         
-        with open(self.reward_log_path, 'a+', newline='') as write_obj:
-            dict_writer = DictWriter(write_obj, fieldnames=self.reward_log_columns)
+        with open(self.reward_log_path, 'a+', newline='') as reward_obj:
+            reward_writer = DictWriter(reward_obj, fieldnames=self.reward_log_columns)
             if episode_index == 0:
-                dict_writer.writeheader()
+                reward_writer.writeheader()
+
+            trajectory = [state[:2].copy()]
 
             for ts in count():
                 action = self.act(state)
                 next_state, env_reward, done, _, info = self.env.step(action)
+                trajectory.append(next_state[:2].copy())
                 
                 # Feedback automatique combiné
                 human_feedback = self._get_human_feedback(next_state)
                 total_reward += env_reward
+                total_feedback += human_feedback
 
+                # Calcul de la perte (loss)
                 if self.tame:
-                    # Met à jour le modèle avec le feedback humain
                     for i in range(len(action)):
+                        features = self.H.featurize_state(state)
+                        predicted = self.H.models[i].predict([features])[0]
+                        loss = (human_feedback - predicted) ** 2
+                        episode_loss += loss
                         self.H.update(state, i, human_feedback)
 
-                # Log les récompenses
-                dict_writer.writerow({
+                # Log des récompenses et métriques
+                reward_writer.writerow({
                     'Episode': episode_index + 1,
                     'Timestep': ts,
                     'Human Feedback': human_feedback,
                     'Environment Reward': env_reward,
-                    'Total Reward': total_reward
+                    'Total Reward': total_reward,
+                    'Action': action,
+                    'Loss': loss if self.tame else 0,
+                    'Epsilon': self.epsilon
                 })
 
                 if done:
-                    #print(f'Episode: {episode_index + 1}, Total Reward: {total_reward}')
                     break
 
                 state = next_state
+        
+        trajectory = np.array(trajectory)
+        predictability = self.compute_predictability(trajectory) if len(trajectory) > 1 else np.nan
+        politeness = self.compute_politeness(
+            self.intimate_violations,
+            self.personal_violations,
+            self.social_violations
+        )
+
+        with open(self.metrics_log_path, 'a+', newline='') as metrics_obj:
+            metrics_writer = DictWriter(metrics_obj, fieldnames=self.metrics_log_columns)
+            if episode_index == 0:
+                metrics_writer.writeheader()
+            metrics_writer.writerow({
+                'Episode': episode_index + 1,
+                'Total Reward': total_reward,
+                'Total Feedback': total_feedback,
+                'Loss': episode_loss,
+                'Collisions': self.collision_count,
+                'Goal Reached': self.goal_reached,
+                'Intimate Zone Violations': self.intimate_violations,
+                'Personal Zone Violations': self.personal_violations,
+                'Social Zone Violations': self.social_violations,
+                'Predictability': predictability,
+                'Politeness': politeness
+            })
+        self.total_rewards.append(total_reward)
+        self.total_feedbacks.append(total_feedback)
+        self.losses.append(episode_loss)
+        self.predictabilities.append(predictability)
+        self.politenesses.append(politeness)
+        self.intimate_violations_per_episode.append(self.intimate_violations)
+        self.personal_violations_per_episode.append(self.personal_violations)
+        self.social_violations_per_episode.append(self.social_violations)
+        self.public_violations_per_episode.append(self.public_violations)
+        self.collisions_per_episode.append(self.collision_count)
+        self.goals_per_episode.append(self.goal_reached)
+
 
         # Décroissance d'epsilon
         if self.epsilon > self.min_eps:
             self.epsilon -= self.epsilon_step
 
+        return total_reward, total_feedback, episode_loss,predictability, politeness
+    
+    def compute_predictability(self,trajectory):
+        """
+        trajectory: np.array de shape (T,2)
+        Retourne un score de lisibilité : plus le score est élevé, plus la trajectoire est prévisible
+        """
+        deltas = np.diff(trajectory, axis=0)
+        angles = np.arctan2(deltas[:,1], deltas[:,0])
+        heading_change = np.diff(angles)
+        # Score = inverse de la variation moyenne des angles
+        predictability_score = 1 / (1 + np.mean(np.abs(heading_change)))
+        return predictability_score
+    
+    def compute_politeness(self,intimate, personal, social):
+        """
+        Score de politesse basé sur les violations des zones proxémiques.
+        Plus le score est élevé, plus le robot est poli.
+        """
+        score = 1 / (1 + intimate + 0.5*personal + 0.1*social)
+        return score
+    
     def train(self, model_file_to_save=None):
-        """Boucle d'entraînement pour tous les épisodes."""
         for i in range(self.num_episodes):
-            self._train_episode(i)
+            total_reward, total_feedback, episode_loss, predictability, politeness = self._train_episode(i)
+            print(f"Episode {i+1}: Total Reward = {total_reward}, Total Feedback = {total_feedback}, Loss = {episode_loss}")
+            self.log_metrics(i, total_reward,total_feedback, episode_loss)
         self.env.close()
         if model_file_to_save is not None:
             self.save_model(model_file_to_save)
+
 
     def play(self, n_episodes=1, render=False):
         """Exécute des épisodes avec l'agent entraîné."""
