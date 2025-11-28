@@ -17,7 +17,7 @@ actions = []
 env = FauteuilEnv(config)
 num_demos = 250 # Generate expert demonstrations
 expert_demonstrations, episode_rewards = generate_expert_demonstrations(env, num_demos)
-print("Num demo generated:", len(expert_demonstrations))
+print("Generate expert demonstrations, collecting data and training BC agent...")
 
 for demonstration in expert_demonstrations:
     for state, action in demonstration:
@@ -34,11 +34,17 @@ action_dim = actions.shape[1]
 agent = BehavioralCloningModel(state_dim, action_dim)
 
 # Train the BC agent
-loss_values, loss_std = agent.train(states, actions, epochs=50, batch_size=50)
+loss_values, loss_std = agent.train(states, actions, epochs=50, batch_size=32)
 
 # Teste le modèle entraîné
-total_reward_final, trajectory_length_final = run_policy(env, agent, render=True)
+total_reward_final, trajectory_length_final, completed_final, hit_humans_final, hit_objects_final = run_policy(env, agent, render=True)
 time.sleep(0.15)
+
+print(f"Total Reward after BC: {total_reward_final}")
+print(f"Trajectory Length after BC: {trajectory_length_final}")
+print(f"Completed after BC: {completed_final}")
+print(f"Human Hits after BC: {hit_humans_final}")
+print(f"Object Hits after BC: {hit_objects_final}")
 
 # ------ Plotting results ------
 epochs = 50

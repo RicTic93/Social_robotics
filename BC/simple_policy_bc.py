@@ -25,7 +25,7 @@ def generate_expert_demonstrations(env, num_demos, render = False, render_delay 
             if render:  # Affiche environnement
                 env.render()
                 time.sleep(render_delay)
-
+    
         if len(trajectory) > 0:
             expert_demonstrations.append(trajectory)
             episode_reward.append(reward_tot)
@@ -55,8 +55,8 @@ def simple_policy(env):
         dist = np.linalg.norm(diff)
         if dist < 0.8:
             direction += (diff / (dist**2 + 1e-6)) * 2.0
-            #if dist<env.max_group_distance:
-            #    direction += (diff / (dist**2 + 1e-6)) * 4.0
+            if dist<1.2:
+                direction += (diff / (dist**2 + 1e-6)) * 4.0
 
     # Normalise l'action pour respecter l'espace d'action [-1,1]
     direction += np.random.uniform(-0.6, 0.6, size=2)
@@ -74,6 +74,8 @@ def run_policy(env, model, render):
     total_reward = 0
     rewards = [] # Pour valutation du tipe de récompense cumulé
     trajectory_length = 0 
+    hit_humans = 0 # Track le nombre de collisions
+    hit_objects = 0
 
     while not done:
         obs_tensor = torch.tensor(obs, dtype=torch.float32).unsqueeze(0)
@@ -86,15 +88,16 @@ def run_policy(env, model, render):
         total_reward += reward
         trajectory_length += 1
 
+        if trajectory_length == 500:
+            return total_reward, trajectory_length, False, hit_humans, hit_objects
+
         if render:
             env.render()
 
         obs = next_obs
 
-    print("Reward finale:", total_reward)
-    print("Trajectory finale:", trajectory_length)
     for n in rewards:
-        if n == -10: print("Hit humans")
-        elif n == -7 : print("Hit object")
+        if n == -10: hit_humans += 1
+        elif n == -7 : hit_objects += 1
 
-    return total_reward, trajectory_length
+    return total_reward, trajectory_length, True, hit_humans, hit_objects

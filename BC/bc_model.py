@@ -48,7 +48,6 @@ class BehavioralCloningModel(nn.Module):
                 total_loss += loss.item()
             loss_values.append(total_loss / len(dataloader))
 
-            print(f'Epoch {epoch + 1}/{epochs}, Loss: {loss_values[-1]:.4f}')
         # Calcule deviation standard des pertes
         loss_std = np.std(loss_values)
 
